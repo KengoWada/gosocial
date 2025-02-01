@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"log"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -34,6 +35,10 @@ func (p *password) Set(text string) error {
 	p.hash = hash
 	p.text = &text
 	return nil
+}
+
+func (p *password) Compare(text string) error {
+	return bcrypt.CompareHashAndPassword(p.hash, []byte(text))
 }
 
 type UserStore struct {
@@ -156,6 +161,41 @@ func (s *UserStore) Delete(ctx context.Context, userID int64) error {
 
 		return nil
 	})
+}
+
+func (s *UserStore) GetByEmail(ctx context.Context, email string) (*User, error) {
+	query := `
+		SELECT id, username, email, password, created_at, updated_at FROM users
+		WHERE email = $1
+	`
+
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+	defer cancel()
+	log.Println(email)
+
+	user := &User{}
+	err := s.db.QueryRowContext(
+		ctx,
+		query,
+		email,
+	).Scan(
+		&user.ID,
+		&user.Username,
+		&user.Email,
+		&user.Password.hash,
+		&user.CreatedAt,
+		&user.UpdatedAt,
+	)
+	if err != nil {
+		switch err {
+		case sql.ErrNoRows:
+			return nil, ErrNotFound
+		default:
+			return nil, err
+		}
+	}
+
+	return user, nil
 }
 
 func (s *UserStore) createUserInvitation(ctx context.Context, tx *sql.Tx, token string, exp time.Duration, userID int64) error {

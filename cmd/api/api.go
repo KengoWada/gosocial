@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/KengoWada/social/docs" // This is required to generate swagger docs
+	"github.com/KengoWada/social/internal/auth"
 	"github.com/KengoWada/social/internal/mailer"
 	"github.com/KengoWada/social/internal/store"
 	"github.com/go-chi/chi/v5"
@@ -16,10 +17,11 @@ import (
 )
 
 type application struct {
-	config config
-	store  store.Storage
-	logger *zap.SugaredLogger
-	mailer mailer.Client
+	config        config
+	store         store.Storage
+	logger        *zap.SugaredLogger
+	mailer        mailer.Client
+	authenticator auth.Authenticator
 }
 
 type config struct {
@@ -29,6 +31,7 @@ type config struct {
 	apiURL      string
 	mail        mailConfig
 	frontendURL string
+	auth        authConfig
 }
 
 type mailConfig struct {
@@ -39,6 +42,22 @@ type mailConfig struct {
 
 type sendgridConfig struct {
 	apikey string
+}
+
+type authConfig struct {
+	basic basicConfig
+	token tokenConfig
+}
+
+type basicConfig struct {
+	username string
+	pass     string
+}
+
+type tokenConfig struct {
+	secret string
+	iss    string
+	exp    time.Duration
 }
 
 type dbConfig struct {
@@ -58,12 +77,13 @@ func (app *application) mount() http.Handler {
 	mux.Use(middleware.Timeout(60 * time.Second))
 
 	mux.Route("/v1", func(r chi.Router) {
-		r.Get("/health", app.healthCheckhandler)
+		r.With(app.BasicAuthMiddleware()).Get("/health", app.healthCheckhandler)
 
 		docsURL := fmt.Sprintf("%s/swagger/doc.json", app.config.addr)
 		r.Get("/swagger/*", httpSwagger.Handler(httpSwagger.URL(docsURL)))
 
 		r.Route("/posts", func(r chi.Router) {
+			r.Use(app.AuthTokenMiddleware())
 			r.Post("/", app.createPostHandler)
 
 			r.Route("/{postID}", func(r chi.Router) {
@@ -79,7 +99,7 @@ func (app *application) mount() http.Handler {
 			r.Put("/activate/{token}", app.activateUserHandler)
 
 			r.Route("/{userID}", func(r chi.Router) {
-				r.Use(app.userContextMiddleware)
+				r.Use(app.AuthTokenMiddleware())
 
 				r.Get("/", app.getUserHandler)
 
@@ -88,11 +108,13 @@ func (app *application) mount() http.Handler {
 			})
 
 			r.Group(func(r chi.Router) {
+				r.Use(app.AuthTokenMiddleware())
 				r.Get("/feed", app.getUserFeedHandler)
 			})
 
 			r.Route("/authentication", func(r chi.Router) {
 				r.Post("/user", app.registerUserHandler)
+				r.Post("/token", app.createTokenHandler)
 			})
 		})
 	})

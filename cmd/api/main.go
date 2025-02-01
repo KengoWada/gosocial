@@ -3,6 +3,7 @@ package main
 import (
 	"time"
 
+	"github.com/KengoWada/social/internal/auth"
 	"github.com/KengoWada/social/internal/db"
 	"github.com/KengoWada/social/internal/env"
 	"github.com/KengoWada/social/internal/mailer"
@@ -48,6 +49,17 @@ func main() {
 				apikey: env.GetString("SENDGRID_API_KEY", ""),
 			},
 		},
+		auth: authConfig{
+			basic: basicConfig{
+				username: env.GetString("BASIC_AUTH_USER", "admin"),
+				pass:     env.GetString("BASIC_AUTH_PASS", "admin"),
+			},
+			token: tokenConfig{
+				secret: env.GetString("JWT_SECRET", ""),
+				exp:    time.Hour * 24 * 3,
+				iss:    "gophersocial",
+			},
+		},
 	}
 
 	logger := zap.Must(zap.NewProduction()).Sugar()
@@ -70,11 +82,14 @@ func main() {
 
 	mailer := mailer.NewSendgrid(cfg.mail.sendgrid.apikey, cfg.mail.fromEmail)
 
+	jwtAuthenticator := auth.NewJWTAuthenticator(cfg.auth.token.secret, cfg.auth.token.iss, cfg.auth.token.iss)
+
 	app := &application{
-		config: cfg,
-		store:  store,
-		logger: logger,
-		mailer: mailer,
+		config:        cfg,
+		store:         store,
+		logger:        logger,
+		mailer:        mailer,
+		authenticator: jwtAuthenticator,
 	}
 
 	mux := app.mount()
