@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/KengoWada/social/docs" // This is required to generate swagger docs
+	"github.com/KengoWada/social/internal/mailer"
 	"github.com/KengoWada/social/internal/store"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -18,18 +19,26 @@ type application struct {
 	config config
 	store  store.Storage
 	logger *zap.SugaredLogger
+	mailer mailer.Client
 }
 
 type config struct {
-	addr   string
-	db     dbConfig
-	env    string
-	apiURL string
-	mail   mailConfig
+	addr        string
+	db          dbConfig
+	env         string
+	apiURL      string
+	mail        mailConfig
+	frontendURL string
 }
 
 type mailConfig struct {
-	exp time.Duration
+	sendgrid  sendgridConfig
+	exp       time.Duration
+	fromEmail string
+}
+
+type sendgridConfig struct {
+	apikey string
 }
 
 type dbConfig struct {
