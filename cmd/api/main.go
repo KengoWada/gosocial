@@ -1,7 +1,7 @@
 package main
 
 import (
-	"log"
+	"time"
 
 	"github.com/KengoWada/social/internal/db"
 	"github.com/KengoWada/social/internal/env"
@@ -39,6 +39,9 @@ func main() {
 			maxIdleTime:  env.GetString("DB_MAX_IDLE_TIME", "15m"),
 		},
 		env: env.GetString("ENV", "development"),
+		mail: mailConfig{
+			exp: time.Hour * 24 * 3, // 3 days
+		},
 	}
 
 	logger := zap.Must(zap.NewProduction()).Sugar()
@@ -66,5 +69,5 @@ func main() {
 
 	mux := app.mount()
 
-	log.Fatal(app.run(mux))
+	app.logger.Fatal(app.run(mux))
 }
